@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>业务资料排版助手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+  <div class="bg-white p-8 rounded-2xl shadow-lg max-w-lg w-full border border-gray-100">
+    <h2 class="text-2xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+      <span>📋</span> 业务资料生成器
+    </h2>
+    <p class="text-sm text-gray-500 mb-6">粘贴客户信息，自动识别并生成标准排版。</p>
+
+    <!-- 输入区域 -->
+    <div class="mb-6">
+      <div class="flex justify-between items-end mb-2">
+        <label for="dataInput" class="block text-sm font-medium text-gray-700">粘贴客户资料：</label>
+      </div>
+      <textarea id="dataInput" rows="8"
+        placeholder="例如:&#10;Choon Koo&#10;0173039937&#10;KL SETAPAT&#10;999/916&#10;AD1234"
+        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"></textarea>
+    </div>
+
+    <!-- 选项切换 -->
+    <div class="mb-4">
+      <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">选择输出类型</p>
+      <div class="flex p-1 bg-gray-100 rounded-xl space-x-1">
+        <button onclick="changeType('RECYCLE')" id="btn-RECYCLE"
+          class="flex-1 py-2 text-xs font-bold rounded-lg transition-all bg-white shadow-sm text-blue-600">
+          黄金回收
+        </button>
+        <button onclick="changeType('GOLDBAR')" id="btn-GOLDBAR"
+          class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-gray-500 hover:bg-gray-200">
+          了解Gold Bar
+        </button>
+        <button onclick="changeType('TICKET')" id="btn-TICKET"
+          class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-gray-500 hover:bg-gray-200">
+          当票
+        </button>
+      </div>
+    </div>
+
+    <!-- 输出展示区域 -->
+    <div class="relative bg-gray-800 border border-gray-700 rounded-lg p-5">
+      <div class="flex justify-between items-start mb-3 border-b border-gray-700 pb-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-gray-400">预览结果</p>
+        <button id="copyBtn"
+          class="shrink-0 text-white hover:text-green-400 bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-all active:scale-95 flex items-center gap-1.5"
+          title="复制内容">
+          <svg id="copyIcon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <svg id="checkIcon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 hidden text-green-400" fill="none"
+            viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span id="copyText" class="text-xs font-bold">一键复制</span>
+        </button>
+      </div>
+
+      <div id="formattedOutput"
+        class="text-sm font-mono text-green-400 whitespace-pre-wrap leading-relaxed min-h-[160px]">等待输入资料...</div>
+    </div>
+  </div>
+
+  <script>
+    let currentType = 'RECYCLE';
+
+    function formatMyPhoneNumber(phone) {
+      if (!phone || phone === '-') return "-";
+      let cleaned = phone.toString().replace(/\D/g, '');
+
+      if (cleaned.startsWith('0')) {
+        cleaned = '60' + cleaned.substring(1);
+      } else if (cleaned.startsWith('1') && (cleaned.length === 9 || cleaned.length === 10)) {
+        cleaned = '60' + cleaned;
+      }
+
+      if (!cleaned.startsWith('60') || cleaned.length < 10) {
+        return phone;
+      }
+
+      const countryCode = '+60';
+      const networkPrefix = cleaned.substring(2, 4);
+      const remainingDigits = cleaned.substring(4);
+
+      if (remainingDigits.length >= 7 && remainingDigits.length <= 8) {
+        const part1 = remainingDigits.substring(0, remainingDigits.length - 4);
+        const part2 = remainingDigits.substring(remainingDigits.length - 4);
+        return `${countryCode} ${networkPrefix} - ${part1} ${part2}`;
+      }
+
+      return `+${cleaned}`;
+    }
+
+    function parseInput(inputText) {
+      const lines = inputText.split('\n').map(l => l.trim()).filter(l => l !== '');
+
+      let name = "";
+      let phone = "";
+      let location = "";
+      let gold = "";
+      let adCode = "";
+      let unassigned = [];
+
+      const adPattern = /^(ad\d+|ads?\s*code|organic|lei)/i;
+      // 修复 BUG：将单纯的 'g' 改为 '\d+\s*(g|gram|克)'，避免误伤含有 'g' 的英文名（如 Angel）
+      const goldKeywords = /(999|916|91\.6|24[kK]|22[kK]|足金|K金|\d+\s*(g|gram|克)|bar|币|金条|了解|想看|买入|卖出|PAMP|价格|回收)/i;
+
+      lines.forEach(line => {
+        // 忽略标题行，避免被误判为姓名
+        if (/^(PL|ORG)【.*】/i.test(line)) return;
+
+        // 1. 判断此行是否带有明确的前缀标签（如果客户已写明字段，优先听客户的）
+        let hasNameLabel = /^(姓名|Name)[\s:：]*/i.test(line);
+        let hasPhoneLabel = /^(电话号码|电话|Phone|Mobile)[\s:：]*/i.test(line);
+        let hasLocLabel = /^(地区|Location|Area)[\s:：]*/i.test(line);
+        let hasGoldLabel = /^(黄金种类\s*&\s*重量|黄金种类|我要了解|款式|Gold|Type)[\s:：]*/i.test(line);
+        let hasAdLabel = /^(Ads?\s*Code)[\s:：]*/i.test(line);
+
+        // 改进正则：匹配标签后接任意数量的冒号、空格或特殊符号，并过滤客套话
+        let contentOnly = line
+          .replace(/[,，]?\s*先了解.*继续/i, '') // 自动过滤掉“先了解回收金价才继续”这类多余的话术
+          .replace(/^(姓名|Name)[\s:：]*/i, '')
+          .replace(/^(电话号码|电话|Phone|Mobile)[\s:：]*/i, '')
+          .replace(/^(地区|Location|Area)[\s:：]*/i, '')
+          .replace(/^(黄金种类\s*&\s*重量|黄金种类|我要了解|款式|Gold|Type)[\s:：]*/i, '')
+          .replace(/^(Ads?\s*Code)[\s:：]*/i, '')
+          .trim();
+
+        // 再次检查清理后的内容，如果是空的或者只是一个冒号，则不处理
+        if (!contentOnly || contentOnly === ":" || contentOnly === "：") return;
+
+        let digitsOnly = contentOnly.replace(/\D/g, '');
+        let assigned = false;
+
+        // 2. 优先根据显式标签精准分配
+        if (hasNameLabel && !name) { name = contentOnly; assigned = true; }
+        else if (hasPhoneLabel && !phone) { phone = contentOnly; assigned = true; }
+        else if (hasLocLabel && !location) { location = contentOnly; assigned = true; }
+        else if (hasGoldLabel && !gold) { gold = contentOnly; assigned = true; }
+        else if (hasAdLabel && !adCode) { adCode = contentOnly.toUpperCase(); assigned = true; }
+
+        if (assigned) return;
+
+        // 3. 如果没有显式标签（例如只粘贴了数值），才使用智能正则猜测
+        // 识别 Ads Code
+        if (!adCode && adPattern.test(contentOnly)) {
+          adCode = contentOnly.toUpperCase();
+          assigned = true;
+        }
+        // 识别电话号码
+        else if (!phone && digitsOnly.length >= 9 && digitsOnly.length <= 12 && (digitsOnly.startsWith('01') || digitsOnly.startsWith('60') || digitsOnly.startsWith('1'))) {
+          phone = digitsOnly;
+          assigned = true;
+        }
+        // 识别 黄金种类/需求
+        else if (!gold && (goldKeywords.test(contentOnly) || line.includes('了解'))) {
+          gold = contentOnly;
+          assigned = true;
+        }
+
+        if (!assigned) {
+          // 地区识别
+          if (!location && (line.includes('地区') || /(kl|selangor|sarawak|penang|johor|kedah|perak|melaka|pahang|terengganu|kelantan|sabah|labuan|putrajaya)/i.test(contentOnly))) {
+            location = contentOnly;
+          } else if (contentOnly !== '-') {
+            unassigned.push(contentOnly);
+          }
+        }
+      });
+
+      // 智能分配
+      if (!name && unassigned.length > 0) name = unassigned.shift();
+      if (!location && unassigned.length > 0) location = unassigned.join(" ");
+
+      return {
+        name: name || "-",
+        phone: (phone && phone !== '-') ? formatMyPhoneNumber(phone) : "-",
+        location: location || "-",
+        gold: gold || "-",
+        adCode: adCode || "-"
+      };
+    }
+
+    function generateTemplate(data, type) {
+      let headerBase = "";
+      let goldLabel = "黄金种类 & 重量：";
+
+      switch (type) {
+        case 'RECYCLE':
+          headerBase = "【黄金回收 】";
+          goldLabel = "黄金种类 & 重量：";
+          break;
+        case 'GOLDBAR':
+          headerBase = "【了解Gold Bar 】";
+          goldLabel = "我要了解：";
+          break;
+        case 'TICKET':
+          headerBase = "【当票 】";
+          goldLabel = "黄金种类 & 重量：";
+          break;
+      }
+
+      // 智能判断前缀：如果 Ads Code 包含 ORGANIC，自动用 ORG；否则默认用 PL
+      let prefix = (data.adCode && data.adCode.toUpperCase().includes('ORGANIC')) ? "ORG" : "PL";
+      let header = prefix + headerBase;
+
+      return `${header}
+
+姓名： ${data.name}
+电话号码： ${data.phone}
+地区： ${data.location}
+${goldLabel} ${data.gold}
+Ads Code: ${data.adCode}`;
+    }
+
+    window.changeType = function (type) {
+      currentType = type;
+      ['RECYCLE', 'GOLDBAR', 'TICKET'].forEach(t => {
+        const btn = document.getElementById(`btn-${t}`);
+        if (t === type) {
+          btn.classList.add('bg-white', 'shadow-sm', 'text-blue-600');
+          btn.classList.remove('text-gray-500', 'hover:bg-gray-200');
+        } else {
+          btn.classList.remove('bg-white', 'shadow-sm', 'text-blue-600');
+          btn.classList.add('text-gray-500', 'hover:bg-gray-200');
+        }
+      });
+      updateOutput();
+    }
+
+    const dataInput = document.getElementById('dataInput');
+    const formattedOutput = document.getElementById('formattedOutput');
+
+    function updateOutput() {
+      const rawValue = dataInput.value;
+      if (rawValue.trim() === '') {
+        formattedOutput.textContent = '等待输入资料...';
+        return;
+      }
+      const parsedData = parseInput(rawValue);
+      formattedOutput.textContent = generateTemplate(parsedData, currentType);
+    }
+
+    dataInput.addEventListener('input', updateOutput);
+
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      const textToCopy = formattedOutput.innerText;
+      if (textToCopy && textToCopy !== '等待输入资料...') {
+        const textarea = document.createElement('textarea');
+        textarea.value = textToCopy;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        if (document.execCommand('copy')) {
+          const copyIcon = document.getElementById('copyIcon');
+          const checkIcon = document.getElementById('checkIcon');
+          const copyText = document.getElementById('copyText');
+          copyIcon.classList.add('hidden');
+          checkIcon.classList.remove('hidden');
+          copyText.textContent = '已复制';
+          setTimeout(() => {
+            copyIcon.classList.remove('hidden');
+            checkIcon.classList.add('hidden');
+            copyText.textContent = '一键复制';
+          }, 2000);
+        }
+        document.body.removeChild(textarea);
+      }
+    });
+  </script>
+</body>
+
+</html>

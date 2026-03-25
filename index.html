@@ -92,14 +92,12 @@
         function parseInput(inputText) {
             let lines = inputText.split('\n').map(l => l.trim());
 
-            // --- 新增逻辑：忽略“姓名”或“Name”之前的所有文本 ---
             const nameLabelPattern = /^(姓名|Name)[\s:：]*/i;
             const firstValidLineIndex = lines.findIndex(line => nameLabelPattern.test(line));
             
             if (firstValidLineIndex !== -1) {
                 lines = lines.slice(firstValidLineIndex);
             }
-            // --------------------------------------------------
 
             lines = lines.filter(l => l !== '');
             
@@ -122,12 +120,15 @@
                 let hasGoldLabel = /^(黄金种类\s*&\s*重量|黄金种类|我要了解|款式|Gold|Type)[\s:：]*/i.test(line);
                 let hasAdLabel = /^(Ads?\s*Code)[\s:：]*/i.test(line);
 
+                // 清洗行内容
                 let contentOnly = line
                     .replace(/[,，]?\s*先了解.*继续/i, '')
                     .replace(/^(姓名|Name)[\s:：]*/i, '')
                     .replace(/^(电话号码|电话|Phone|Mobile)[\s:：]*/i, '')
                     .replace(/^(地区|Location|Area)[\s:：]*/i, '')
-                    .replace(/^(黄金种类\s*&\s*重量|黄金种类|我要了解|款式|Gold|Type)[\s:：]*/i, '')
+                    // 核心修复：中文标签继续支持模糊匹配，但英文 Gold/Type 必须带冒号才移除
+                    .replace(/^(黄金种类\s*&\s*重量|黄金种类|我要了解|款式)[\s:：]*/i, '')
+                    .replace(/^(Gold|Type)[:：]\s*/i, '') 
                     .replace(/^(Ads?\s*Code)[\s:：]*/i, '')
                     .trim();
 
